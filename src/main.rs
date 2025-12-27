@@ -1,8 +1,10 @@
-use clap::{arg, Args, CommandFactory, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
 use nvml_wrapper::{Device, Nvml};
 use serde::Deserialize;
 use std::{collections::HashMap, io};
+#[cfg(feature = "gui")]
+mod gui_gtk;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -12,6 +14,9 @@ struct Cli {
     /// Path to the config file
     #[arg(short, long, default_value = "/etc/nvidia_oc.json")]
     file: String,
+    /// Launch the Qt6 GUI (requires python3 + PyQt6)
+    #[arg(long, default_value_t = false)]
+    gui: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -112,6 +117,60 @@ struct Config {
 }
 
 fn main() {
+    // Allow launching the GUI via --gui even if clap parsing fails in some cases.
+    // Check raw args first and run the GUI immediately if requested.
+    let raw_args: Vec<String> = std::env::args().collect();
+    // GUI feature marker (used for conditional compilation checks)
+    #[cfg(feature = "gui")]
+    let _gui_enabled = true;
+    #[cfg(not(feature = "gui"))]
+    let _gui_enabled = false;
+    // If child marker env var is present, we are the child process that should start the GUI
+    if std::env::var("NVIDIA_OC_GUI_RUN").is_ok() {
+        #[cfg(feature = "gui")]
+        {
+            // find file arg if present
+            let mut file_arg = "/etc/nvidia_oc.json".to_string();
+            let mut it = raw_args.iter();
+            while let Some(s) = it.next() {
+                if s == "--file" || s == "-f" {
+                    if let Some(val) = it.next() {
+                        file_arg = val.clone();
+                    }
+                } else if s.starts_with("--file=") {
+                    if let Some(eq) = s.split_once('=') { file_arg = eq.1.to_string(); }
+                }
+            }
+            gui_gtk::run(&file_arg);
+            return;
+        }
+        #[cfg(not(feature = "gui"))]
+        {
+            eprintln!("GUI feature not enabled in this build. Rebuild with `--features gui`.");
+            std::process::exit(1);
+        }
+    }
+
+    // If original args requested `--gui`, spawn a sanitized child without the `--gui` flag
+    if raw_args.iter().any(|a| a == "--gui" || a == "--gui=true") {
+        // Build child process: set env marker so child will start GUI without unknown argv
+        let mut cmd = std::process::Command::new(std::env::current_exe().expect("cannot get exe path"));
+        cmd.env("NVIDIA_OC_GUI_RUN", "1");
+        // forward file arg if present
+        let mut it = raw_args.iter();
+        while let Some(s) = it.next() {
+            if s == "--file" || s == "-f" {
+                if let Some(val) = it.next() {
+                    cmd.arg("--file").arg(val);
+                }
+            } else if s.starts_with("--file=") {
+                if let Some(eq) = s.split_once('=') { cmd.arg(format!("--file={}", eq.1)); }
+            }
+        }
+        let status = cmd.status().expect("Failed to spawn GUI child");
+        std::process::exit(status.code().unwrap_or(0));
+    }
+
     let cli = Cli::parse();
 
     match &cli.command {
