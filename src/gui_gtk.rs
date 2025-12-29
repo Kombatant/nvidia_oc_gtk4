@@ -126,7 +126,7 @@ pub mod imp {
             }
         }
 
-        let app = Application::new(Some("org.example.nvidia_oc"), Default::default());
+        let app = Application::new(Some("org.github.kombatant.nvidia_oc"), Default::default());
 
         app.connect_activate(move |app| {
             let window = ApplicationWindow::new(app);
@@ -159,6 +159,42 @@ pub mod imp {
             gpu_box.append(&gpu_combo);
             main.append(&gpu_box);
 
+            // Try to read current GPU settings via NVML and prefer those over
+            // values stored in the systemd service. If NVML is unavailable or
+            // a query fails, fall back to the service values and then to
+            // sensible defaults.
+            let mut current_power: Option<i32> = None; // milliwatts
+            let mut current_freq: Option<i32> = None; // MHz
+            let mut current_mem: Option<i32> = None; // MHz
+            let mut nvml_available = true;
+            let gpu_index_num: u32 = svc_index.as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
+            match nvml_wrapper::Nvml::init() {
+                Ok(nvml) => {
+                    match nvml.device_by_index(gpu_index_num) {
+                        Ok(device) => {
+                            if let Ok(limit) = device.enforced_power_limit() {
+                                current_power = Some(limit as i32);
+                            }
+                            if let Ok(freq) = device.gpc_clock_vf_offset() {
+                                current_freq = Some(freq);
+                            }
+                            if let Ok(mem) = device.mem_clock_vf_offset() {
+                                current_mem = Some(mem);
+                            }
+                        }
+                        Err(_) => {
+                            nvml_available = false;
+                        }
+                    }
+                }
+                Err(_) => {
+                    nvml_available = false;
+                }
+            }
+            if !nvml_available {
+                show_message(Some(&window), MessageType::Warning, ButtonsType::Ok, "Warning: could not query NVML — using service values or defaults.");
+            }
+
             // Controls grid
             let grid = Grid::new();
             grid.set_row_spacing(10);
@@ -167,7 +203,10 @@ pub mod imp {
 
             let power_label = Label::new(Some("Power (W)"));
             power_label.set_halign(gtk4::Align::Start);
-            let power_initial = svc_power.unwrap_or(400_000) as f64 / 1000.0;
+            let power_initial = match current_power {
+                Some(p) => p as f64 / 1000.0,
+                None => svc_power.unwrap_or(400_000) as f64 / 1000.0,
+            };
             let power_adj = Adjustment::new(power_initial, 0.0, 500.0, 0.1, 1.0, 0.0);
             let power_scale = Scale::new(Orientation::Horizontal, Some(&power_adj));
             power_scale.set_hexpand(true);
@@ -178,12 +217,12 @@ pub mod imp {
 
             let freq_label = Label::new(Some("GPU freq offset (MHz)"));
             freq_label.set_halign(gtk4::Align::Start);
-            let freq_initial = svc_freq.unwrap_or(0);
+            let freq_initial = current_freq.unwrap_or(svc_freq.unwrap_or(0));
             let freq_adj = Adjustment::new(freq_initial as f64, -2000.0, 2000.0, 1.0, 10.0, 0.0);
             let freq_spin = SpinButton::new(Some(&freq_adj), 1.0, 0);
             let mem_label = Label::new(Some("Memory offset (MHz)"));
             mem_label.set_halign(gtk4::Align::Start);
-            let mem_initial = svc_mem.unwrap_or(0);
+            let mem_initial = current_mem.unwrap_or(svc_mem.unwrap_or(0));
             let mem_adj = Adjustment::new(mem_initial as f64, -20000.0, 20000.0, 1.0, 10.0, 0.0);
             let mem_spin = SpinButton::new(Some(&mem_adj), 1.0, 0);
             grid.attach(&freq_label, 0, 1, 1, 1);
@@ -294,6 +333,71 @@ pub mod imp {
 
             preview_updater();
 
+            // Disable the service button initially if a service exists and
+            // the current NVML-derived values match the values stored in
+            // the service. Re-enable the button as soon as the user
+            // changes any control.
+            use std::rc::Rc;
+            let service_exists = std::path::Path::new(svc_path).exists();
+            let svc_index_clone = svc_index.clone();
+            let svc_power_clone = svc_power;
+            let svc_freq_clone = svc_freq;
+            let svc_mem_clone = svc_mem;
+            let svc_min_clone = svc_min;
+            let svc_max_clone = svc_max;
+            let service_btn_state = service_btn.clone();
+            let combo_state = gpu_combo.clone();
+            let pa_state = power_adj.clone();
+            let fa_state = freq_adj.clone();
+            let ma_state = mem_adj.clone();
+            let mia_state = min_adj.clone();
+            let mxa_state = max_adj.clone();
+
+            let check_state = Rc::new(move || {
+                if !service_exists {
+                    service_btn_state.set_sensitive(true);
+                    return;
+                }
+                let active = combo_state.active_id();
+                let gpu_id = active.as_deref().unwrap_or("0");
+                let power_now = (pa_state.value() * 1000.0).round() as i32;
+                let freq_now = fa_state.value() as i32;
+                let mem_now = ma_state.value() as i32;
+                let min_now = mia_state.value() as i32;
+                let max_now = mxa_state.value() as i32;
+
+                let idx_eq = svc_index_clone.as_deref().map(|s| s == gpu_id).unwrap_or(false);
+                let power_eq = svc_power_clone.map(|p| p == power_now).unwrap_or(false);
+                let freq_eq = svc_freq_clone.map(|p| p == freq_now).unwrap_or(false);
+                let mem_eq = svc_mem_clone.map(|p| p == mem_now).unwrap_or(false);
+                let min_eq = svc_min_clone.map(|p| p == min_now).unwrap_or(false);
+                let max_eq = svc_max_clone.map(|p| p == max_now).unwrap_or(false);
+
+                if idx_eq && power_eq && freq_eq && mem_eq && min_eq && max_eq {
+                    service_btn_state.set_sensitive(false);
+                } else {
+                    service_btn_state.set_sensitive(true);
+                }
+            });
+
+            // Attach the checker to all controls so any change will re-evaluate
+            // the service button state.
+            let cs = check_state.clone();
+            power_scale.connect_value_changed(move |_| cs());
+            let cs = check_state.clone();
+            freq_spin.connect_value_changed(move |_| cs());
+            let cs = check_state.clone();
+            mem_spin.connect_value_changed(move |_| cs());
+            let cs = check_state.clone();
+            min_spin.connect_value_changed(move |_| cs());
+            let cs = check_state.clone();
+            max_spin.connect_value_changed(move |_| cs());
+            let cs = check_state.clone();
+            gpu_combo.connect_changed(move |_| cs());
+
+            // Run once to set initial state
+            (check_state)();
+
             // Service button handler
             let service_btn_clone = service_btn.clone();
             let gpu_for_service = gpu_combo.clone();
@@ -312,7 +416,7 @@ pub mod imp {
                 let service_path = "/etc/systemd/system/nvidia_oc.service";
                 let exists = std::path::Path::new(service_path).exists();
 
-                let content = format!("[Unit]\nDescription=NVIDIA Overclocking Service\nAfter=network.target\n\n[Service]\nExecStart=\"{}\"\nUser=root\nRestart=on-failure\n\n[Install]\nWantedBy=multi-user.target\n", cmd);
+                let content = format!("[Unit]\nDescription=NVIDIA Overclocking Service\nAfter=network.target\n\n[Service]\nExecStart={}\nUser=root\nRestart=on-failure\n\n[Install]\nWantedBy=multi-user.target\n", cmd);
 
                 let tmp = std::env::temp_dir().join("nvidia_oc.service.tmp");
                 if let Err(e) = std::fs::write(&tmp, content) {

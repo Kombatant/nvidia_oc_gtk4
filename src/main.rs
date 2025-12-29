@@ -120,6 +120,16 @@ fn main() {
     // Allow launching the GUI via --gui even if clap parsing fails in some cases.
     // Check raw args first and run the GUI immediately if requested.
     let raw_args: Vec<String> = std::env::args().collect();
+    // If launched without any parameters, show help and exit (treat as
+    // `--help`). However, if this process was spawned as the GUI child
+    // (`NVIDIA_OC_GUI_RUN` set) we should not print help — the child may
+    // intentionally run with no CLI args.
+    if raw_args.len() <= 1 && std::env::var("NVIDIA_OC_GUI_RUN").is_err() {
+        let mut cmd = Cli::command();
+        let _ = cmd.print_help();
+        println!();
+        return;
+    }
     // GUI feature marker (used for conditional compilation checks)
     #[cfg(feature = "gui")]
     let _gui_enabled = true;
