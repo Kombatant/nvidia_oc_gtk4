@@ -1204,8 +1204,8 @@ pub mod imp {
             charts_row.set_row_spacing(12);
             charts_row.set_hexpand(true);
             charts_row.set_column_homogeneous(true);
-            charts_row.attach(&mem_chart_card, 0, 0, 1, 1);
-            charts_row.attach(&core_chart_card, 1, 0, 1, 1);
+            charts_row.attach(&core_chart_card, 0, 0, 1, 1);
+            charts_row.attach(&mem_chart_card, 1, 0, 1, 1);
 
             metrics_layout.append(&top_grid);
             metrics_layout.append(&charts_row);
