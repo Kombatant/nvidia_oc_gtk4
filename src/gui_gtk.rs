@@ -4,8 +4,9 @@
 #[cfg(feature = "gui")]
 pub mod imp {
     use gtk4::prelude::*;
-    use gtk4::{Application, ApplicationWindow, Box as GtkBox, Orientation, Label, Button, Scale, Adjustment, SpinButton, TextView, ScrolledWindow, MessageDialog, MessageType, ButtonsType, Grid, ComboBoxText, CssProvider};
+    use gtk4::{Application, ApplicationWindow, Box as GtkBox, Orientation, Label, Button, Scale, Adjustment, SpinButton, TextView, ScrolledWindow, MessageDialog, MessageType, ButtonsType, Grid, ComboBoxText, CssProvider, Notebook, LevelBar};
     use gtk4::gdk;
+    use gtk4::glib;
 
     fn build_command(gpu_index: &str, power: i32, freq: i32, mem: i32, min_clock: i32, max_clock: i32) -> String {
         let prog = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_else(|_| "nvidia_oc".to_string());
@@ -136,11 +137,11 @@ pub mod imp {
             // Let GTK size the window to the content automatically
 
             // Slightly tighter vertical spacing to reduce empty space
-            let main = GtkBox::new(Orientation::Vertical, 8);
-            main.set_margin_top(6);
-            main.set_margin_bottom(6);
-            main.set_margin_start(6);
-            main.set_margin_end(6);
+            let perf_box = GtkBox::new(Orientation::Vertical, 8);
+            perf_box.set_margin_top(6);
+            perf_box.set_margin_bottom(6);
+            perf_box.set_margin_start(6);
+            perf_box.set_margin_end(6);
 
             // GPU selector
             let gpu_box = GtkBox::new(Orientation::Horizontal, 6);
@@ -157,7 +158,7 @@ pub mod imp {
                 gpu_combo.set_active_id(Some("0"));
             }
             gpu_box.append(&gpu_combo);
-            main.append(&gpu_box);
+            perf_box.append(&gpu_box);
 
             // Try to read current GPU settings via NVML and prefer those over
             // values stored in the systemd service. If NVML is unavailable or
@@ -247,12 +248,12 @@ pub mod imp {
             grid.attach(&max_label, 0, 4, 1, 1);
             grid.attach(&max_spin, 1, 4, 2, 1);
 
-            main.append(&grid);
+            perf_box.append(&grid);
 
             // Preview
             let preview_label = Label::new(Some("Command Preview"));
             preview_label.set_halign(gtk4::Align::Start);
-            main.append(&preview_label);
+            perf_box.append(&preview_label);
             let scrolled = ScrolledWindow::new();
             // Make preview tall enough for ~3 lines of text
             scrolled.set_min_content_height(84);
@@ -265,7 +266,7 @@ pub mod imp {
             preview.set_pixels_below_lines(2);
             preview.set_wrap_mode(gtk4::WrapMode::WordChar);
             scrolled.set_child(Some(&preview));
-            main.append(&scrolled);
+            perf_box.append(&scrolled);
 
             // Actions
             let actions = GtkBox::new(Orientation::Horizontal, 8);
@@ -300,7 +301,85 @@ pub mod imp {
 
             actions.append(&service_btn);
             actions.append(&apply);
-            main.append(&actions);
+            perf_box.append(&actions);
+
+            // Metrics tab -------------------------------------------------
+            let metrics_box = GtkBox::new(Orientation::Vertical, 6);
+            metrics_box.set_margin_top(12);
+            metrics_box.set_margin_bottom(12);
+            metrics_box.set_margin_start(12);
+            metrics_box.set_margin_end(12);
+            let vram_row = GtkBox::new(Orientation::Horizontal, 6);
+            let vram_lbl = Label::new(Some("VRAM Usage:"));
+            vram_lbl.set_halign(gtk4::Align::Start);
+            let vram_lb = LevelBar::new();
+            vram_lb.set_min_value(0.0);
+            vram_lb.set_max_value(1.0);
+            vram_lb.set_hexpand(true);
+            vram_lb.set_css_classes(&["nvidia-progress"]);
+            let vram_text_right = Label::new(None);
+            vram_text_right.set_halign(gtk4::Align::Center);
+            vram_row.append(&vram_lbl);
+            vram_row.append(&vram_lb);
+            vram_row.append(&vram_text_right);
+            let core_clk_lbl = Label::new(Some("GPU Core clock: N/A"));
+            core_clk_lbl.set_halign(gtk4::Align::Start);
+            let mem_clk_lbl = Label::new(Some("GPU Memory clock: N/A"));
+            mem_clk_lbl.set_halign(gtk4::Align::Start);
+            let temps_lbl = Label::new(Some("Temperatures: N/A"));
+            temps_lbl.set_halign(gtk4::Align::Start);
+            let fans_lbl = Label::new(Some("Fan Speed: N/A"));
+            fans_lbl.set_halign(gtk4::Align::Start);
+
+            // GPU Usage progress row
+            let usage_row = GtkBox::new(Orientation::Horizontal, 6);
+            let usage_lbl = Label::new(Some("GPU Usage:"));
+            usage_lbl.set_halign(gtk4::Align::Start);
+            let usage_lb = LevelBar::new();
+            usage_lb.set_min_value(0.0);
+            usage_lb.set_max_value(100.0);
+            usage_lb.set_hexpand(true);
+            usage_lb.set_css_classes(&["nvidia-progress"]);
+            let usage_text_right = Label::new(None);
+            usage_text_right.set_halign(gtk4::Align::Center);
+            usage_row.append(&usage_lbl);
+            usage_row.append(&usage_lb);
+            usage_row.append(&usage_text_right);
+
+            // Power Usage progress row
+            let power_row = GtkBox::new(Orientation::Horizontal, 6);
+            let power_lbl = Label::new(Some("Power Usage:"));
+            power_lbl.set_halign(gtk4::Align::Start);
+            let power_lb = LevelBar::new();
+            power_lb.set_min_value(0.0);
+            power_lb.set_max_value(1.0);
+            power_lb.set_hexpand(true);
+            power_lb.set_css_classes(&["nvidia-progress"]);
+            let power_text_right = Label::new(None);
+            power_text_right.set_halign(gtk4::Align::Center);
+            power_row.append(&power_lbl);
+            power_row.append(&power_lb);
+            power_row.append(&power_text_right);
+            metrics_box.append(&vram_row);
+            metrics_box.append(&core_clk_lbl);
+            metrics_box.append(&mem_clk_lbl);
+            metrics_box.append(&temps_lbl);
+            metrics_box.append(&fans_lbl);
+            metrics_box.append(&usage_row);
+            metrics_box.append(&power_row);
+
+            // Notebook with two tabs
+            let notebook = Notebook::new();
+            notebook.append_page(&perf_box, Some(&Label::new(Some("Performance"))));
+            notebook.append_page(&metrics_box, Some(&Label::new(Some("Metrics"))));
+
+            // Add a small CSS provider to increase progress bar height
+            if let Some(display) = gdk::Display::default() {
+                let provider = CssProvider::new();
+                let css = "progressbar.nvidia-progress { min-height: 28px; height: 28px; color: #ffffff; font-size: 12px; }\nprogressbar.nvidia-progress .trough { background-color: #2b2b2b; border-radius: 4px; min-height: 28px; height: 28px; }\nprogressbar.nvidia-progress .progress { background-color: #2e86ff; border-radius: 4px; min-height: 28px; height: 28px; }\nprogressbar.nvidia-progress { color: #ffffff; }";
+                provider.load_from_data(css);
+                gtk4::style_context_add_provider_for_display(&display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+            }
 
             // Live preview updater
             let preview_buffer = preview.buffer();
@@ -397,6 +476,118 @@ pub mod imp {
 
             // Run once to set initial state
             (check_state)();
+
+            // NVML handle for periodic metric updates (if available)
+            let nvml_handle = nvml_wrapper::Nvml::init().ok();
+
+            // Poll NVML every second to update metrics labels
+            let vram_lb_cl = vram_lb.clone();
+            let vram_text_right_cl = vram_text_right.clone();
+            let core_clk_lbl_cl = core_clk_lbl.clone();
+            let mem_clk_lbl_cl = mem_clk_lbl.clone();
+            let temps_lbl_cl = temps_lbl.clone();
+            let fans_lbl_cl = fans_lbl.clone();
+            let usage_lb_cl = usage_lb.clone();
+            let usage_text_right_cl = usage_text_right.clone();
+            let power_lb_cl = power_lb.clone();
+            let power_text_right_cl = power_text_right.clone();
+            let _gpu_index_poll = gpu_index_num;
+            // Move nvml_handle into the timeout closure so it remains alive
+            let nvml_handle = nvml_handle;
+            glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+                if let Some(ref nvml) = nvml_handle {
+                    if let Ok(dev) = nvml.device_by_index(gpu_index_num) {
+                        // VRAM
+                        if let Ok(mi) = dev.memory_info() {
+                            let used_mib = mi.used / 1024 / 1024;
+                            let total_mib = mi.total / 1024 / 1024;
+                            let used = used_mib as f64;
+                            let total = total_mib as f64;
+                            vram_lb_cl.set_min_value(0.0);
+                            vram_lb_cl.set_max_value(total);
+                            vram_lb_cl.set_value(used);
+                            vram_text_right_cl.set_text(&format!("{}/{} MiB", used_mib, total_mib));
+                        } else {
+                            vram_lb_cl.set_value(0.0);
+                            vram_text_right_cl.set_text("N/A");
+                        }
+
+                        // Clocks
+                        let core_text = match dev.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics) {
+                            Ok(clk) => format!("GPU Core clock: {} MHz", clk),
+                            Err(_) => "GPU Core clock: N/A".to_string(),
+                        };
+                        core_clk_lbl_cl.set_text(&core_text);
+                        let mem_text = match dev.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory) {
+                            Ok(clk) => format!("GPU memory clock: {} MHz", clk),
+                            Err(_) => "GPU memory clock: N/A".to_string(),
+                        };
+                        mem_clk_lbl_cl.set_text(&mem_text);
+
+                        // Temperatures (GPU; hotspot may not be available on all drivers)
+                        let temps_text = match dev.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu) {
+                            Ok(g) => format!("Temperatures: GPU {} °C, Hotspot N/A", g),
+                            Err(_) => "Temperatures: N/A".to_string(),
+                        };
+                        temps_lbl_cl.set_text(&temps_text);
+
+                        // Fan Speed (try multiple fan indices; use first successful reading)
+                        let mut fans_text = "Fan Speed: N/A".to_string();
+                        for i in 0u32..4u32 {
+                            if let Ok(s) = dev.fan_speed(i) {
+                                fans_text = format!("Fan Speed: {}%", s);
+                                break;
+                            }
+                        }
+                        fans_lbl_cl.set_text(&fans_text);
+
+                        // Utilization -> usage progress bar
+                        if let Ok(u) = dev.utilization_rates() {
+                            usage_lb_cl.set_min_value(0.0);
+                            usage_lb_cl.set_max_value(100.0);
+                            usage_lb_cl.set_value(u.gpu as f64);
+                            usage_text_right_cl.set_text(&format!("{}%", u.gpu));
+                        } else {
+                            usage_lb_cl.set_value(0.0);
+                            usage_text_right_cl.set_text("N/A");
+                        }
+
+                        // Power usage -> power progress bar
+                        match (dev.power_usage(), dev.enforced_power_limit()) {
+                            (Ok(cur), Ok(limit)) if limit > 0 => {
+                                let cur_w = (cur as f64) / 1000.0;
+                                let lim_w = (limit as f64) / 1000.0;
+                                power_lb_cl.set_min_value(0.0);
+                                power_lb_cl.set_max_value(lim_w);
+                                power_lb_cl.set_value(cur_w);
+                                power_text_right_cl.set_text(&format!("{:.2} / {:.2} W", cur_w, lim_w));
+                            }
+                            (Ok(cur), Ok(limit)) => {
+                                let cur_w = (cur as f64) / 1000.0;
+                                let lim_w = (limit as f64) / 1000.0;
+                                power_lb_cl.set_min_value(0.0);
+                                power_lb_cl.set_max_value(lim_w);
+                                power_lb_cl.set_value(0.0);
+                                power_text_right_cl.set_text(&format!("{:.2} / {:.2} W", cur_w, lim_w));
+                            }
+                            (Ok(cur), Err(_)) => {
+                                let cur_w = (cur as f64) / 1000.0;
+                                power_lb_cl.set_min_value(0.0);
+                                power_lb_cl.set_max_value(cur_w.max(1.0));
+                                power_lb_cl.set_value(cur_w);
+                                power_text_right_cl.set_text(&format!("{:.2} W", cur_w));
+                            }
+                            _ => {
+                                power_lb_cl.set_min_value(0.0);
+                                power_lb_cl.set_max_value(1.0);
+                                power_lb_cl.set_value(0.0);
+                                power_text_right_cl.set_text("N/A");
+                            }
+                        }
+                    }
+                }
+                glib::Continue(true)
+            });
 
             // Service button handler
             let service_btn_clone = service_btn.clone();
@@ -587,7 +778,7 @@ exit 0
                 confirm.present();
             });
 
-            window.set_child(Some(&main));
+            window.set_child(Some(&notebook));
             window.show();
         });
 
