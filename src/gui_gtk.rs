@@ -4,7 +4,7 @@
 pub mod imp {
     use libadwaita as adw;
     use adw::prelude::*;
-    use gtk4::{Box as GtkBox, Orientation, Label, Button, Scale, Adjustment, TextView, ScrolledWindow, MessageDialog, MessageType, ButtonsType, Grid, ComboBoxText, CssProvider, LevelBar, DrawingArea, Separator, Revealer, Image, WindowControls, PackType, Settings, CenterBox};
+    use gtk4::{Box as GtkBox, Orientation, Label, Button, Scale, Adjustment, TextView, ScrolledWindow, MessageDialog, MessageType, ButtonsType, Grid, ComboBoxText, CssProvider, LevelBar, DrawingArea, Separator, Revealer, Image, WindowControls, PackType, Settings, CenterBox, Entry};
     use gtk4::gdk;
     use gtk4::cairo;
     use gtk4::glib;
@@ -343,7 +343,7 @@ pub mod imp {
             rows_card.set_css_classes(&["card", "perf-card"]);
             rows_card.set_hexpand(true);
 
-            let build_step_row = |icon_name: &str, title: &str, adj: &Adjustment, step: f64| -> (GtkBox, Label) {
+            let build_step_row = |icon_name: &str, title: &str, adj: &Adjustment, step: f64| -> (GtkBox, Entry) {
                 let row = GtkBox::new(Orientation::Horizontal, 12);
                 row.set_css_classes(&["perf-row"]);
                 row.set_hexpand(true);
@@ -368,12 +368,17 @@ pub mod imp {
                 title_lbl.set_hexpand(true);
                 title_lbl.set_css_classes(&["perf-row-title"]);
 
-                let value_lbl = Label::new(Some(&format!("{}", adj.value().round() as i32)));
-                value_lbl.set_halign(gtk4::Align::End);
-                value_lbl.set_valign(gtk4::Align::Center);
-                // Ensure the text is right-aligned within the value column.
-                value_lbl.set_xalign(1.0);
-                value_lbl.set_css_classes(&["perf-row-value"]);
+                // Replace the static value label with an editable numeric entry
+                let value_entry = Entry::new();
+                value_entry.set_text(&format!("{}", adj.value().round() as i32));
+                // Right-align the entry text so it matches the previous label layout
+                libadwaita::prelude::EntryExt::set_alignment(&value_entry, 1.0);
+                value_entry.set_valign(gtk4::Align::Center);
+                // Keep the value column compact: enough for ~5 digits (+ optional minus)
+                value_entry.set_width_chars(6);
+                value_entry.set_max_width_chars(6);
+                value_entry.set_hexpand(false);
+                value_entry.set_css_classes(&["perf-row-value"]);
 
                 let minus = Button::with_label("−");
                 minus.set_css_classes(&["perf-stepper"]);
@@ -393,18 +398,30 @@ pub mod imp {
                     adj_plus.set_value(v);
                 });
 
-                let value_lbl_cl = value_lbl.clone();
-                let adj_for_lbl = adj.clone();
+                let value_entry_cl = value_entry.clone();
+                let adj_for_entry = adj.clone();
                 adj.connect_value_changed(move |_| {
-                    value_lbl_cl.set_text(&format!("{}", adj_for_lbl.value().round() as i32));
+                    value_entry_cl.set_text(&format!("{}", adj_for_entry.value().round() as i32));
+                });
+
+                // When the user activates the entry (presses Enter), parse and apply to the adjustment.
+                let adj_for_entry2 = adj.clone();
+                value_entry.connect_activate(move |e| {
+                    if let Ok(v) = e.text().as_str().trim().parse::<i32>() {
+                        let v = (v as f64).clamp(adj_for_entry2.lower(), adj_for_entry2.upper());
+                        adj_for_entry2.set_value(v);
+                    } else {
+                        // Reset to the current adjustment value on parse failure
+                        e.set_text(&format!("{}", adj_for_entry2.value().round() as i32));
+                    }
                 });
 
                 row.append(&badge);
                 row.append(&title_lbl);
-                row.append(&value_lbl);
+                row.append(&value_entry);
                 row.append(&minus);
                 row.append(&plus);
-                (row, value_lbl)
+                (row, value_entry)
             };
 
             let (freq_row, _freq_val_lbl) = build_step_row("speedometer-symbolic", "GPU Freq Offset", &freq_adj, 1.0);
@@ -1248,7 +1265,7 @@ pub mod imp {
             // Add a small CSS provider to increase progress bar height
             if let Some(display) = gdk::Display::default() {
                 let provider = CssProvider::new();
-                let css = ".metrics-card { padding: 12px; }\n.metrics-card-snug { padding: 8px; }\n.metrics-title { font-weight: 700; }\n.metrics-stat-name { opacity: 0.9; }\n.metrics-stat-value { font-weight: 700; }\n.metrics-row { padding: 6px 10px; }\n.metrics-gauge-big { font-size: 32px; font-weight: 700; }\n.metrics-gauge-mid { font-size: 22px; font-weight: 700; }\n.metrics-gauge-small { opacity: 0.85; }\n.metrics-value { font-weight: 700; }\nlevelbar.nvidia-progress trough { min-height: 28px; border-radius: 8px; }\nlevelbar.nvidia-progress trough block { min-height: 28px; border-radius: 8px; }\nlevelbar.nvidia-progress trough block.filled { background-color: @accent_bg_color; }\nlevelbar.nvidia-progress trough block.empty { background-color: alpha(@window_fg_color, 0.06); }\n\n.perf-section-title { font-weight: 700; font-size: 18px; }\n.perf-card { padding: 14px; }\n.perf-icon-badge { min-width: 36px; min-height: 36px; border-radius: 999px; background-color: transparent; }\n.perf-card-title { font-weight: 700; }\n.perf-card-subtitle { opacity: 0.75; }\n.perf-row { padding: 6px 6px; }\n.perf-row-title { font-weight: 600; }\n.perf-row-value { font-weight: 700; min-width: 80px; }\n.perf-stepper { border-radius: 999px; padding: 6px 12px; background-color: alpha(@window_fg_color, 0.06); }\n.perf-disclosure { border-radius: 999px; padding: 4px 10px; background-color: alpha(@window_fg_color, 0.06); }\n.perf-action-primary { border-radius: 999px; padding: 10px 18px; }\n.perf-action-secondary { border-radius: 999px; padding: 10px 18px; }";
+                let css = ".metrics-card { padding: 12px; }\n.metrics-card-snug { padding: 8px; }\n.metrics-title { font-weight: 700; }\n.metrics-stat-name { opacity: 0.9; }\n.metrics-stat-value { font-weight: 700; }\n.metrics-row { padding: 6px 10px; }\n.metrics-gauge-big { font-size: 32px; font-weight: 700; }\n.metrics-gauge-mid { font-size: 22px; font-weight: 700; }\n.metrics-gauge-small { opacity: 0.85; }\n.metrics-value { font-weight: 700; }\nlevelbar.nvidia-progress trough { min-height: 28px; border-radius: 8px; }\nlevelbar.nvidia-progress trough block { min-height: 28px; border-radius: 8px; }\nlevelbar.nvidia-progress trough block.filled { background-color: @accent_bg_color; }\nlevelbar.nvidia-progress trough block.empty { background-color: alpha(@window_fg_color, 0.06); }\n\n.perf-section-title { font-weight: 700; font-size: 18px; }\n.perf-card { padding: 14px; }\n.perf-icon-badge { min-width: 36px; min-height: 36px; border-radius: 999px; background-color: transparent; }\n.perf-card-title { font-weight: 700; }\n.perf-card-subtitle { opacity: 0.75; }\n.perf-row { padding: 6px 6px; }\n.perf-row-title { font-weight: 600; }\n.perf-row-value { font-weight: 700; min-width: 56px; }\n/* Make numeric entry fields visually match surrounding cards (no native entry chrome) */\nentry.perf-row-value { background-color: transparent; border: none; padding: 0; }\nentry.perf-row-value:focus { background-color: transparent; box-shadow: none; }\n.perf-stepper { border-radius: 999px; padding: 6px 12px; background-color: alpha(@window_fg_color, 0.06); }\n.perf-disclosure { border-radius: 999px; padding: 4px 10px; background-color: alpha(@window_fg_color, 0.06); }\n.perf-action-primary { border-radius: 999px; padding: 10px 18px; }\n.perf-action-secondary { border-radius: 999px; padding: 10px 18px; }";
                 provider.load_from_data(css);
                 gtk4::style_context_add_provider_for_display(&display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
             }
