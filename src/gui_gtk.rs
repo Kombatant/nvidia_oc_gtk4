@@ -664,49 +664,39 @@ pub mod imp {
             top_grid.attach(&vram_card, 0, 0, 1, 1);
 
             // --- Stats strip (goes into the chart header) ---
-            let stat_core_name = Label::new(Some("Core"));
-            stat_core_name.set_halign(gtk4::Align::Start);
-            stat_core_name.set_css_classes(&["metrics-stat-name"]);
             let stat_core_value = Label::new(Some("N/A"));
             stat_core_value.set_halign(gtk4::Align::Start);
             stat_core_value.set_css_classes(&["metrics-stat-value"]);
             // Keep width stable as values update (prevents window width changes).
             stat_core_value.set_width_chars(10);
 
-            let stat_mem_name = Label::new(Some("Memory"));
-            stat_mem_name.set_halign(gtk4::Align::Start);
-            stat_mem_name.set_css_classes(&["metrics-stat-name"]);
             let stat_mem_value = Label::new(Some("N/A"));
             stat_mem_value.set_halign(gtk4::Align::Start);
             stat_mem_value.set_css_classes(&["metrics-stat-value"]);
             stat_mem_value.set_width_chars(10);
 
-            let stat_temp_name = Label::new(Some("Temp"));
-            stat_temp_name.set_halign(gtk4::Align::Start);
-            stat_temp_name.set_css_classes(&["metrics-stat-name"]);
             let stat_temp_value = Label::new(Some("N/A"));
             stat_temp_value.set_halign(gtk4::Align::Start);
             stat_temp_value.set_css_classes(&["metrics-stat-value"]);
             stat_temp_value.set_width_chars(6);
 
-            let mk_stat = |name: &Label, value: &Label| {
+            let mk_stat_value = |value: &Label| {
                 let b = GtkBox::new(Orientation::Vertical, 0);
-                b.append(name);
                 b.append(value);
                 b
             };
 
             let stats_strip = GtkBox::new(Orientation::Horizontal, 18);
             stats_strip.set_halign(gtk4::Align::End);
-            stats_strip.append(&mk_stat(&stat_core_name, &stat_core_value));
+            stats_strip.append(&mk_stat_value(&stat_core_value));
 
             let mem_stats_strip = GtkBox::new(Orientation::Horizontal, 18);
             mem_stats_strip.set_halign(gtk4::Align::End);
-            mem_stats_strip.append(&mk_stat(&stat_mem_name, &stat_mem_value));
+            mem_stats_strip.append(&mk_stat_value(&stat_mem_value));
 
             let temp_stats_strip = GtkBox::new(Orientation::Horizontal, 18);
             temp_stats_strip.set_halign(gtk4::Align::End);
-            temp_stats_strip.append(&mk_stat(&stat_temp_name, &stat_temp_value));
+            temp_stats_strip.append(&mk_stat_value(&stat_temp_value));
 
             // --- Right: GPU usage card ---
             let usage_card = GtkBox::new(Orientation::Vertical, 8);
@@ -824,7 +814,6 @@ pub mod imp {
                     cr.set_source_rgba(0.17, 0.17, 0.17, 1.0);
                     let _ = cr.arc(cx, cy, r, start, end);
                     let _ = cr.stroke();
-
                     cr.set_source_rgba(0.18, 0.53, 1.0, 1.0);
                     let _ = cr.arc(cx, cy, r, start, sweep);
                     let _ = cr.stroke();
