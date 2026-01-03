@@ -708,19 +708,36 @@ pub mod imp {
             usage_title.set_css_classes(&["metrics-title"]);
             usage_card.append(&usage_title);
 
+            // Keep the bar vertically centered inside the card by overlaying
+            // the numeric value on top of the `LevelBar` and letting the bar
+            // expand. This mirrors the VRAM gauge's centered value style.
+            let usage_value = Label::new(Some("0%"));
+            usage_value.set_halign(gtk4::Align::Center);
+            usage_value.set_css_classes(&["metrics-value"]);
+            usage_value.set_width_chars(4);
+
+            let usage_bar_box = GtkBox::new(Orientation::Vertical, 0);
+            usage_bar_box.set_hexpand(true);
+            usage_bar_box.set_vexpand(true);
+            usage_bar_box.set_valign(gtk4::Align::Center);
+
             let usage_bar = LevelBar::new();
             usage_bar.set_min_value(0.0);
             usage_bar.set_max_value(100.0);
             usage_bar.set_value(0.0);
             usage_bar.set_hexpand(true);
             usage_bar.set_css_classes(&["nvidia-progress"]);
-            usage_card.append(&usage_bar);
 
-            let usage_value = Label::new(Some("0%"));
-            usage_value.set_halign(gtk4::Align::Center);
-            usage_value.set_css_classes(&["metrics-value"]);
-            usage_value.set_width_chars(4);
-            usage_card.append(&usage_value);
+            let usage_overlay = gtk4::Overlay::new();
+            usage_overlay.set_child(Some(&usage_bar));
+            let usage_center_box = GtkBox::new(Orientation::Vertical, 0);
+            usage_center_box.set_halign(gtk4::Align::Center);
+            usage_center_box.set_valign(gtk4::Align::Center);
+            usage_center_box.append(&usage_value);
+            usage_overlay.add_overlay(&usage_center_box);
+
+            usage_bar_box.append(&usage_overlay);
+            usage_card.append(&usage_bar_box);
 
             // --- Right: power usage card ---
             let power_card = GtkBox::new(Orientation::Vertical, 8);
@@ -732,19 +749,35 @@ pub mod imp {
             power_title.set_css_classes(&["metrics-title"]);
             power_card.append(&power_title);
 
+            // Vertically center the power bar in the card like the GPU usage
+            // bar, with the numeric value shown below.
+            let power_value = Label::new(Some("N/A"));
+            power_value.set_halign(gtk4::Align::Center);
+            power_value.set_css_classes(&["metrics-value"]);
+            power_value.set_width_chars(18);
+
+            let power_bar_box = GtkBox::new(Orientation::Vertical, 0);
+            power_bar_box.set_hexpand(true);
+            power_bar_box.set_vexpand(true);
+            power_bar_box.set_valign(gtk4::Align::Center);
+
             let power_bar = LevelBar::new();
             power_bar.set_min_value(0.0);
             power_bar.set_max_value(1.0);
             power_bar.set_value(0.0);
             power_bar.set_hexpand(true);
             power_bar.set_css_classes(&["nvidia-progress"]);
-            power_card.append(&power_bar);
 
-            let power_value = Label::new(Some("N/A"));
-            power_value.set_halign(gtk4::Align::Center);
-            power_value.set_css_classes(&["metrics-value"]);
-            power_value.set_width_chars(18);
-            power_card.append(&power_value);
+            let power_overlay = gtk4::Overlay::new();
+            power_overlay.set_child(Some(&power_bar));
+            let power_center_box = GtkBox::new(Orientation::Vertical, 0);
+            power_center_box.set_halign(gtk4::Align::Center);
+            power_center_box.set_valign(gtk4::Align::Center);
+            power_center_box.append(&power_value);
+            power_overlay.add_overlay(&power_center_box);
+
+            power_bar_box.append(&power_overlay);
+            power_card.append(&power_bar_box);
 
             // Top grid (2x2):
             // (0,0) VRAM, (1,0) Fan, (0,1) Usage, (1,1) Power
