@@ -1,7 +1,7 @@
 
 # Zelos
 
-Zelos is a simple Rust CLI tool designed to overclock NVIDIA GPUs on Linux. This tool was developed to support both X11 and Wayland environments, addressing a gap in existing overclocking tools that only support X11. 
+Zelos is a simple Rust tool designed to overclock NVIDIA GPUs on Linux. This tool was developed to support both X11 and Wayland environments, addressing a gap in existing overclocking tools that only support X11. 
 
 This forks the excellent effort from nvidia_oc (https://github.com/Dreaming-Codes/nvidia_oc) and adds a GTK4 front end to the app with performance metrics (among other things).
 
@@ -37,7 +37,7 @@ To ensure Zelos runs on startup, follow these steps:
 
 1. Download the latest binary file from the [latest release](https://github.com/Kombatant/zelos/releases/).
 2. Store the binary file in a secure location.
-3. Create a systemd service file at `/etc/systemd/system/zelos.service` with the following content:
+3. Create a systemd service file at `/etc/systemd/system/zelos.service` with the following content (use appropriate clocks for your card):
 
 ```service
 [Unit]
