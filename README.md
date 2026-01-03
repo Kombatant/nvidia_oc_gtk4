@@ -3,7 +3,7 @@
 
 Zelos is a simple Rust CLI tool designed to overclock NVIDIA GPUs on Linux. This tool was developed to support both X11 and Wayland environments, addressing a gap in existing overclocking tools that only support X11. 
 
-This fork adds a GTK4 front end to the app with performance metrics.
+This forks the excellent effort from nvidia_oc (https://github.com/Dreaming-Codes/nvidia_oc) and adds a GTK4 front end to the app with performance metrics (among other things).
 
 ## GTK4 GUI
 
@@ -13,7 +13,7 @@ Used an LLM to do the following:
 - A new tab was added with basic performance metrics for your card.
 - The UI displays power in watts (`W`) to the user, while the underlying CLI and systemd service still use milliwatts (`mW`). The GUI converts UI watt values to milliwatts when constructing commands.
 - `main.rs` was updated to handle launching the GUI when requested via command line arguments or environment variables.
-	- Added a service creation/update flow: the GUI can write a systemd unit for `zelos` and will run the required privileged steps under a single elevation request (via `pkexec`) so the user is prompted for elevation only once. Temporary files used during the flow are cleaned up after completion.
+- Added a service creation/update flow: the GUI can write a systemd unit for `zelos` and will run the required privileged steps under a single elevation request (via `pkexec`) so the user is prompted for elevation only once. Temporary files used during the flow are cleaned up after completion.
 
 Example (rendered) screenshot included below:
 
@@ -35,7 +35,7 @@ To set the overclock parameters for your NVIDIA GPU, use the following command:
 
 To ensure Zelos runs on startup, follow these steps:
 
-1. Download the binary file from the [latest release](https://github.com/Kombatant/zelos/releases/).
+1. Download the latest binary file from the [latest release](https://github.com/Kombatant/zelos/releases/).
 2. Store the binary file in a secure location.
 3. Create a systemd service file at `/etc/systemd/system/zelos.service` with the following content:
 
