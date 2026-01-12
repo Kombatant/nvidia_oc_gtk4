@@ -424,11 +424,11 @@ pub mod imp {
                 (row, value_entry)
             };
 
-            let (freq_row, _freq_val_lbl) = build_step_row("speedometer-symbolic", "GPU Freq Offset", &freq_adj, 1.0);
+            let (freq_row, _freq_val_lbl) = build_step_row("speedometer-symbolic", "GPU Freq Offset (MHz)", &freq_adj, 1.0);
             rows_card.append(&freq_row);
             rows_card.append(&Separator::new(Orientation::Horizontal));
 
-            let (mem_row, _mem_val_lbl) = build_step_row("media-floppy-symbolic", "Memory Offset", &mem_adj, 1.0);
+            let (mem_row, _mem_val_lbl) = build_step_row("media-floppy-symbolic", "Memory Offset (MHz)", &mem_adj, 1.0);
             rows_card.append(&mem_row);
             rows_card.append(&Separator::new(Orientation::Horizontal));
 
@@ -817,7 +817,6 @@ pub mod imp {
             let fan_header_spacer = GtkBox::new(Orientation::Horizontal, 0);
             fan_header_spacer.set_hexpand(true);
             fan_header.append(&fan_header_spacer);
-            fan_header.append(&temp_stats_strip);
             fan_card.append(&fan_header);
 
             let fan_gauge = DrawingArea::new();
@@ -848,6 +847,15 @@ pub mod imp {
             fan_overlay.set_hexpand(true);
             fan_overlay.set_vexpand(true);
             fan_card.append(&fan_overlay);
+
+            // Bottom-right: Temperature
+            let fan_footer = GtkBox::new(Orientation::Horizontal, 0);
+            fan_footer.set_hexpand(true);
+            let fan_footer_spacer = GtkBox::new(Orientation::Horizontal, 0);
+            fan_footer_spacer.set_hexpand(true);
+            fan_footer.append(&fan_footer_spacer);
+            fan_footer.append(&temp_stats_strip);
+            fan_card.append(&fan_footer);
 
             {
                 let gauge_state = gauge_state.clone();
@@ -905,7 +913,6 @@ pub mod imp {
             let mem_header_spacer = GtkBox::new(Orientation::Horizontal, 0);
             mem_header_spacer.set_hexpand(true);
             mem_chart_header.append(&mem_header_spacer);
-            mem_chart_header.append(&mem_stats_strip);
             mem_chart_card.append(&mem_chart_header);
 
             let mem_chart = DrawingArea::new();
@@ -915,6 +922,15 @@ pub mod imp {
             // Keep the overall window from expanding; allow the chart to shrink.
             mem_chart.set_content_width(250);
             mem_chart_card.append(&mem_chart);
+
+            // Bottom-right: Memory clock value
+            let mem_chart_footer = GtkBox::new(Orientation::Horizontal, 0);
+            mem_chart_footer.set_hexpand(true);
+            let mem_footer_spacer = GtkBox::new(Orientation::Horizontal, 0);
+            mem_footer_spacer.set_hexpand(true);
+            mem_chart_footer.append(&mem_footer_spacer);
+            mem_chart_footer.append(&mem_stats_strip);
+            mem_chart_card.append(&mem_chart_footer);
 
             {
                 let history = mem_clock_history.clone();
@@ -1060,7 +1076,6 @@ pub mod imp {
             let header_spacer = GtkBox::new(Orientation::Horizontal, 0);
             header_spacer.set_hexpand(true);
             chart_header.append(&header_spacer);
-            chart_header.append(&stats_strip);
             core_chart_card.append(&chart_header);
 
             let core_chart = DrawingArea::new();
@@ -1070,6 +1085,15 @@ pub mod imp {
             // Keep the overall window from expanding; allow the chart to shrink.
             core_chart.set_content_width(250);
             core_chart_card.append(&core_chart);
+
+            // Bottom-right: Core clock value
+            let core_chart_footer = GtkBox::new(Orientation::Horizontal, 0);
+            core_chart_footer.set_hexpand(true);
+            let core_footer_spacer = GtkBox::new(Orientation::Horizontal, 0);
+            core_footer_spacer.set_hexpand(true);
+            core_chart_footer.append(&core_footer_spacer);
+            core_chart_footer.append(&stats_strip);
+            core_chart_card.append(&core_chart_footer);
 
             {
                 let history = core_clock_history.clone();
