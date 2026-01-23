@@ -5,7 +5,8 @@
       "memOffset": 160,
       "powerLimit": 500,
       "minClock": 0,
-      "maxClock": 2000
+      "maxClock": 2000,
+      "targetTemp": 75
     }
   }
 }

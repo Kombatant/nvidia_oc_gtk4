@@ -235,6 +235,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "nvml-wrapper",
+ "nvml-wrapper-sys",
  "serde",
  "serde_json",
  "sudo2",

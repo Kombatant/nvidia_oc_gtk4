@@ -1,6 +1,12 @@
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
 use nvml_wrapper::{error::NvmlError, Device, Nvml};
+use nvml_wrapper_sys::bindings::{
+    nvmlDevice_t, nvmlReturn_enum_NVML_SUCCESS,
+    nvmlTemperatureThresholds_enum_NVML_TEMPERATURE_THRESHOLD_ACOUSTIC_CURR,
+    nvmlTemperatureThresholds_enum_NVML_TEMPERATURE_THRESHOLD_ACOUSTIC_MAX,
+    nvmlTemperatureThresholds_enum_NVML_TEMPERATURE_THRESHOLD_ACOUSTIC_MIN, NvmlLib,
+};
 use serde::Deserialize;
 use std::{collections::HashMap, io};
 
@@ -64,6 +70,11 @@ struct Sets {
     /// GPU max memory clock
     #[arg(long, requires = "min_mem_clock")]
     max_mem_clock: Option<u32>,
+    /// Target temperature in Celsius (acoustic limit). The GPU will automatically
+    /// adjust fan curves to maintain this temperature. Similar to MSI Afterburner's
+    /// "target temperature" feature.
+    #[arg(short, long)]
+    target_temp: Option<u32>,
 }
 
 impl Sets {
@@ -120,6 +131,20 @@ impl Sets {
             device
                 .set_mem_locked_clocks(min_mem_clock, max_mem_clock)
                 .expect("Failed to set GPU min and max memory clocks");
+        }
+
+        if let Some(target_temp) = self.target_temp {
+            if let Err(e) = set_acoustic_temperature(device, target_temp) {
+                let (min, max) = get_acoustic_temperature_range(device);
+                let mut error_msg = format!(
+                    "Failed to set target temperature: {}°C - {}",
+                    target_temp, e
+                );
+                if let (Some(min), Some(max)) = (min, max) {
+                    error_msg.push_str(&format!(" Valid range: {}°C - {}°C", min, max));
+                }
+                panic!("{}", error_msg);
+            }
         }
     }
 }
@@ -179,6 +204,20 @@ fn main() {
                 ),
                 Err(e) => eprintln!("Failed to get GPU power limit constraints: {:?}", e),
             }
+
+            // Target temperature (acoustic limit)
+            match get_acoustic_temperature(&device) {
+                Some(temp) => println!("Target temperature (acoustic): {}°C", temp),
+                None => eprintln!("Failed to get target temperature (not supported or not set)"),
+            }
+
+            let (min_temp, max_temp) = get_acoustic_temperature_range(&device);
+            match (min_temp, max_temp) {
+                (Some(min), Some(max)) => {
+                    println!("Target temperature range: {}°C - {}°C", min, max)
+                }
+                _ => eprintln!("Failed to get target temperature range (not supported)"),
+            }
         }
         None => {
             let Ok(config_file) = std::fs::read_to_string(cli.file) else {
@@ -226,4 +265,110 @@ fn generate_completion_script<G: Generator>(gen: G) {
     let mut cmd = Cli::command();
     let name = cmd.get_name().to_string();
     generate(gen, &mut cmd, name, &mut io::stdout());
+}
+
+/// Gets the raw NVML device handle from a Device.
+/// This is needed to call low-level NVML functions not exposed by nvml-wrapper.
+fn get_raw_device_handle(device: &Device) -> nvmlDevice_t {
+    // SAFETY: Device stores the raw handle as the first field in its struct.
+    // We access it by transmuting the reference.
+    unsafe { std::ptr::read(device as *const Device as *const nvmlDevice_t) }
+}
+
+/// Sets the acoustic (target) temperature threshold.
+/// The GPU will automatically adjust fan curves to maintain this temperature.
+fn set_acoustic_temperature(device: &Device, temp_celsius: u32) -> Result<(), String> {
+    let handle = get_raw_device_handle(device);
+    let mut temp = temp_celsius as i32;
+
+    // Load the NVML library
+    let nvml_lib = unsafe {
+        NvmlLib::new("libnvidia-ml.so.1")
+            .or_else(|_| NvmlLib::new("libnvidia-ml.so"))
+            .map_err(|e| format!("Failed to load NVML library: {:?}", e))?
+    };
+
+    let result = unsafe {
+        nvml_lib.nvmlDeviceSetTemperatureThreshold(
+            handle,
+            nvmlTemperatureThresholds_enum_NVML_TEMPERATURE_THRESHOLD_ACOUSTIC_CURR,
+            &mut temp,
+        )
+    };
+
+    if result == nvmlReturn_enum_NVML_SUCCESS {
+        Ok(())
+    } else {
+        Err(format!("NVML error code: {}", result))
+    }
+}
+
+/// Gets the current acoustic (target) temperature threshold.
+fn get_acoustic_temperature(device: &Device) -> Option<u32> {
+    let handle = get_raw_device_handle(device);
+    let mut temp: u32 = 0;
+
+    let nvml_lib = unsafe {
+        NvmlLib::new("libnvidia-ml.so.1")
+            .or_else(|_| NvmlLib::new("libnvidia-ml.so"))
+            .ok()?
+    };
+
+    let result = unsafe {
+        nvml_lib.nvmlDeviceGetTemperatureThreshold(
+            handle,
+            nvmlTemperatureThresholds_enum_NVML_TEMPERATURE_THRESHOLD_ACOUSTIC_CURR,
+            &mut temp,
+        )
+    };
+
+    if result == nvmlReturn_enum_NVML_SUCCESS {
+        Some(temp)
+    } else {
+        None
+    }
+}
+
+/// Gets the min and max acoustic temperature range.
+fn get_acoustic_temperature_range(device: &Device) -> (Option<u32>, Option<u32>) {
+    let handle = get_raw_device_handle(device);
+    let mut min_temp: u32 = 0;
+    let mut max_temp: u32 = 0;
+
+    let nvml_lib = match unsafe {
+        NvmlLib::new("libnvidia-ml.so.1").or_else(|_| NvmlLib::new("libnvidia-ml.so"))
+    } {
+        Ok(lib) => lib,
+        Err(_) => return (None, None),
+    };
+
+    let min_result = unsafe {
+        nvml_lib.nvmlDeviceGetTemperatureThreshold(
+            handle,
+            nvmlTemperatureThresholds_enum_NVML_TEMPERATURE_THRESHOLD_ACOUSTIC_MIN,
+            &mut min_temp,
+        )
+    };
+
+    let max_result = unsafe {
+        nvml_lib.nvmlDeviceGetTemperatureThreshold(
+            handle,
+            nvmlTemperatureThresholds_enum_NVML_TEMPERATURE_THRESHOLD_ACOUSTIC_MAX,
+            &mut max_temp,
+        )
+    };
+
+    let min = if min_result == nvmlReturn_enum_NVML_SUCCESS {
+        Some(min_temp)
+    } else {
+        None
+    };
+
+    let max = if max_result == nvmlReturn_enum_NVML_SUCCESS {
+        Some(max_temp)
+    } else {
+        None
+    };
+
+    (min, max)
 }
