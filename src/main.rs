@@ -1,4 +1,4 @@
-use clap::{arg, Args, CommandFactory, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
 use nvml_wrapper::{Device, Nvml};
 use serde::Deserialize;
