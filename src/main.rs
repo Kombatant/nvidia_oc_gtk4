@@ -1,6 +1,6 @@
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
-use nvml_wrapper::{Device, Nvml};
+use nvml_wrapper::{error::NvmlError, Device, Nvml};
 use serde::Deserialize;
 use std::{collections::HashMap, io};
 
@@ -81,9 +81,27 @@ impl Sets {
         }
 
         if let Some(limit) = self.power_limit {
-            device
-                .set_power_management_limit(limit)
-                .expect("Failed to set GPU power limit");
+            if let Err(e) = device.set_power_management_limit(limit) {
+                match e {
+                    NvmlError::InvalidArg => {
+                        let mut error_msg = format!(
+                            "Failed to set GPU power limit: {} mW is out of range.",
+                            limit
+                        );
+                        if let Ok(constraints) = device.power_management_limit_constraints() {
+                            error_msg.push_str(&format!(
+                                " Valid range: {}-{} mW ({}-{} W)",
+                                constraints.min_limit,
+                                constraints.max_limit,
+                                constraints.min_limit / 1000,
+                                constraints.max_limit / 1000
+                            ));
+                        }
+                        panic!("{}", error_msg);
+                    }
+                    _ => panic!("Failed to set GPU power limit: {:?}", e),
+                }
+            }
         }
 
         if let (Some(min_clock), Some(max_clock)) = (self.min_clock, self.max_clock) {
@@ -150,6 +168,16 @@ fn main() {
             match power_limit {
                 Ok(power_limit) => println!("GPU power limit: {} W", power_limit / 1000),
                 Err(e) => eprintln!("Failed to get GPU power limit: {:?}", e),
+            }
+
+            let power_constraints = device.power_management_limit_constraints();
+            match power_constraints {
+                Ok(constraints) => println!(
+                    "GPU power limit range: {}-{} W",
+                    constraints.min_limit / 1000,
+                    constraints.max_limit / 1000
+                ),
+                Err(e) => eprintln!("Failed to get GPU power limit constraints: {:?}", e),
             }
         }
         None => {
