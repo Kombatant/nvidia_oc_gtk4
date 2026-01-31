@@ -1289,7 +1289,7 @@ pub mod imp {
             // Add a small CSS provider to increase progress bar height
             if let Some(display) = gdk::Display::default() {
                 let provider = CssProvider::new();
-                let css = ".metrics-card { padding: 12px; }\n.metrics-card-snug { padding: 8px; }\n.metrics-title { font-weight: 700; }\n.metrics-stat-name { opacity: 0.9; }\n.metrics-stat-value { font-weight: 700; }\n.metrics-row { padding: 6px 10px; }\n.metrics-gauge-big { font-size: 32px; font-weight: 700; }\n.metrics-gauge-mid { font-size: 22px; font-weight: 700; }\n.metrics-gauge-small { opacity: 0.85; }\n.metrics-value { font-weight: 700; }\nlevelbar.nvidia-progress trough { min-height: 28px; border-radius: 8px; }\nlevelbar.nvidia-progress trough block { min-height: 28px; border-radius: 8px; }\nlevelbar.nvidia-progress trough block.filled { background-color: @accent_bg_color; }\nlevelbar.nvidia-progress trough block.empty { background-color: alpha(@window_fg_color, 0.06); }\n\n.perf-section-title { font-weight: 700; font-size: 18px; }\n.perf-card { padding: 14px; }\n.perf-icon-badge { min-width: 36px; min-height: 36px; border-radius: 999px; background-color: transparent; }\n.perf-card-title { font-weight: 700; }\n.perf-card-subtitle { opacity: 0.75; }\n.perf-row { padding: 6px 6px; }\n.perf-row-title { font-weight: 600; }\n.perf-row-value { font-weight: 700; min-width: 56px; }\n/* Make numeric entry fields visually match surrounding cards (no native entry chrome) */\nentry.perf-row-value { background-color: transparent; border: none; padding: 0; }\nentry.perf-row-value:focus { background-color: transparent; box-shadow: none; }\n.perf-stepper { border-radius: 999px; padding: 6px 12px; background-color: alpha(@window_fg_color, 0.06); }\n.perf-disclosure { border-radius: 999px; padding: 4px 10px; background-color: alpha(@window_fg_color, 0.06); }\n.perf-action-primary { border-radius: 999px; padding: 10px 18px; }\n.perf-action-secondary { border-radius: 999px; padding: 10px 18px; }";
+                let css = ".metrics-card { padding: 12px; }\n.metrics-card-snug { padding: 8px; }\n.metrics-title { font-weight: 700; }\n.metrics-stat-name { opacity: 0.9; }\n.metrics-stat-value { font-weight: 700; }\n.metrics-row { padding: 6px 10px; }\n.metrics-gauge-big { font-size: 32px; font-weight: 700; }\n.metrics-gauge-mid { font-size: 22px; font-weight: 700; }\n.metrics-gauge-small { opacity: 0.85; }\n.metrics-value { font-weight: 700; }\n.metrics-temp-warn { color: #f5a524; }\n.metrics-temp-hot { color: #ff4d4d; }\n@keyframes temp-blink {\n  0% { opacity: 1.0; }\n  50% { opacity: 0.15; }\n  100% { opacity: 1.0; }\n}\n.metrics-temp-crit { color: #ff4d4d; animation: temp-blink 1s steps(1, end) infinite; }\nlevelbar.nvidia-progress trough { min-height: 28px; border-radius: 8px; }\nlevelbar.nvidia-progress trough block { min-height: 28px; border-radius: 8px; }\nlevelbar.nvidia-progress trough block.filled { background-color: @accent_bg_color; }\nlevelbar.nvidia-progress trough block.empty { background-color: alpha(@window_fg_color, 0.06); }\n\n.perf-section-title { font-weight: 700; font-size: 18px; }\n.perf-card { padding: 14px; }\n.perf-icon-badge { min-width: 36px; min-height: 36px; border-radius: 999px; background-color: transparent; }\n.perf-card-title { font-weight: 700; }\n.perf-card-subtitle { opacity: 0.75; }\n.perf-row { padding: 6px 6px; }\n.perf-row-title { font-weight: 600; }\n.perf-row-value { font-weight: 700; min-width: 56px; }\n/* Make numeric entry fields visually match surrounding cards (no native entry chrome) */\nentry.perf-row-value { background-color: transparent; border: none; padding: 0; }\nentry.perf-row-value:focus { background-color: transparent; box-shadow: none; }\n.perf-stepper { border-radius: 999px; padding: 6px 12px; background-color: alpha(@window_fg_color, 0.06); }\n.perf-disclosure { border-radius: 999px; padding: 4px 10px; background-color: alpha(@window_fg_color, 0.06); }\n.perf-action-primary { border-radius: 999px; padding: 10px 18px; }\n.perf-action-secondary { border-radius: 999px; padding: 10px 18px; }";
                 provider.load_from_data(css);
                 gtk4::style_context_add_provider_for_display(&display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
             }
@@ -1482,11 +1482,24 @@ pub mod imp {
                         }
 
                         // Temperature (GPU)
-                        let temp_text = match dev.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu) {
-                            Ok(g) => format!("{} °C", g),
-                            Err(_) => "N/A".to_string(),
+                        let temp = dev.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu).ok();
+                        let temp_text = match temp {
+                            Some(g) => format!("{} °C", g),
+                            None => "N/A".to_string(),
                         };
                         stat_temp_value_cl.set_text(&temp_text);
+                        stat_temp_value_cl.remove_css_class("metrics-temp-warn");
+                        stat_temp_value_cl.remove_css_class("metrics-temp-hot");
+                        stat_temp_value_cl.remove_css_class("metrics-temp-crit");
+                        if let Some(g) = temp {
+                            if (70..80).contains(&g) {
+                                stat_temp_value_cl.add_css_class("metrics-temp-warn");
+                            } else if (80..=90).contains(&g) {
+                                stat_temp_value_cl.add_css_class("metrics-temp-hot");
+                            } else if g > 90 {
+                                stat_temp_value_cl.add_css_class("metrics-temp-crit");
+                            }
+                        }
 
                         // Fan Speed (try multiple fan indices; use first successful reading)
                         let mut fans_text = "N/A".to_string();
